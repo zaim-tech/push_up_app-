@@ -1,0 +1,36 @@
+[project]
+name = "zaim-push-up"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Flet developer", email = "you@example.com" }
+]
+dependencies = [
+    "flet>=0.85.2",
+    "pose-camera-view @ git+https://github.com/zaim-tech/pose_camera_view.git",
+    "flet-permission-handler>=0.85.2",
+]
+
+[dependency-groups]
+dev = [
+    "flet-cli>=0.85.2",
+    "flet-desktop>=0.85.2",
+    "flet-web>=0.85.2",
+]
+
+[tool.flet]
+org = "com.mycompany"
+product = "zaim-push-up"
+company = "Flet"
+copyright = "Copyright (C) 2023-2026 by Flet"
+
+[tool.flet.android.feature]
+"android.hardware.camera" = true
+
+[tool.flet.android.permission]
+"android.permission.CAMERA" = true
+
+[tool.flet.app]
+path = "src"
