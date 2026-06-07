@@ -82,14 +82,24 @@ jobs:
           sudo apt-get install -y --no-install-recommends $LINUX_DEPS
 
       # ======================================================
-      # ✅ PROPER FIX FOR APK / AAB (ML Kit + R8 error)
+      # ✅ INJECT PROGUARD RULES (Fix for ML Kit + R8)
       # ======================================================
-      - name: Prepare Android proguard rules (fix ML Kit R8)
+      - name: Inject proguard-rules.pro (ML Kit R8 fix)
         if: matrix.name == 'apk' || matrix.name == 'aab'
         shell: bash
         run: |
-          mkdir -p android/app
-          cat > android/app/proguard-rules.pro << 'EOF'
+          echo "Waiting for Flet to create the Flutter project structure..."
+          for i in {1..40}; do
+            if [ -d "build/flutter/android/app" ]; then
+              echo "✅ Found build/flutter/android/app directory"
+              break
+            fi
+            echo "Waiting... ($i/40)"
+            sleep 3
+          done
+
+          mkdir -p build/flutter/android/app
+          cat > build/flutter/android/app/proguard-rules.pro << 'EOF'
           # Fix for google_mlkit_text_recognition missing classes during R8
           -dontwarn com.google.mlkit.vision.text.chinese.**
           -dontwarn com.google.mlkit.vision.text.devanagari.**
@@ -97,11 +107,11 @@ jobs:
           -dontwarn com.google.mlkit.vision.text.korean.**
           -dontwarn com.google.mlkit.**
 
-          # Keep ML Kit classes loaded via reflection
+          # Keep ML Kit classes that are loaded via reflection
           -keep class com.google.mlkit.** { *; }
           -keep class com.google_mlkit_** { *; }
           EOF
-          echo "✅ Created android/app/proguard-rules.pro"
+          echo "✅ Successfully injected proguard-rules.pro"
 
       - name: Build app
         shell: bash
@@ -113,3 +123,4 @@ jobs:
         with:
           name: ${{ matrix.name }}-build-artifact
           path: ${{ matrix.artifact_path }}
+          
