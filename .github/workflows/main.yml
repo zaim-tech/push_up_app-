@@ -23,43 +23,36 @@ jobs:
             build_cmd: "flet build linux"
             artifact_path: build/linux
             needs_linux_deps: true
-
           - name: macos
             runner: macos-26
             build_cmd: "flet build macos"
             artifact_path: build/macos
             needs_linux_deps: false
-
           - name: windows
             runner: windows-latest
             build_cmd: "flet build windows"
             artifact_path: build/windows
             needs_linux_deps: false
-
           - name: apk
             runner: ubuntu-latest
             build_cmd: "flet build apk"
             artifact_path: build/apk
             needs_linux_deps: false
-
           - name: aab
             runner: ubuntu-latest
             build_cmd: "flet build aab"
             artifact_path: build/aab
             needs_linux_deps: false
-
           - name: web
             runner: ubuntu-latest
             build_cmd: "flet build web"
             artifact_path: build/web
             needs_linux_deps: false
-
           - name: ipa
             runner: macos-26
             build_cmd: "flet build ipa"
             artifact_path: build/ipa
             needs_linux_deps: false
-
           - name: ios-simulator
             runner: macos-26
             build_cmd: "flet build ios-simulator"
@@ -82,36 +75,48 @@ jobs:
           sudo apt-get install -y --no-install-recommends $LINUX_DEPS
 
       # ======================================================
-      # ✅ INJECT PROGUARD RULES (Fix for ML Kit + R8)
+      # ✅ ROBUST FIX: Inject proguard-rules.pro into Flet generated project
       # ======================================================
-      - name: Inject proguard-rules.pro (ML Kit R8 fix)
+      - name: Inject Android proguard rules (ML Kit R8 fix)
         if: matrix.name == 'apk' || matrix.name == 'aab'
         shell: bash
         run: |
-          echo "Waiting for Flet to create the Flutter project structure..."
-          for i in {1..40}; do
-            if [ -d "build/flutter/android/app" ]; then
-              echo "✅ Found build/flutter/android/app directory"
+          set -x
+          echo "=== Waiting for Flet to generate Flutter project ==="
+          
+          # Wait for the Flutter project to be created (check for pubspec.yaml)
+          for i in {1..60}; do
+            if [ -f "build/flutter/pubspec.yaml" ]; then
+              echo "✅ Flutter project detected (pubspec.yaml exists)"
               break
             fi
-            echo "Waiting... ($i/40)"
-            sleep 3
+            echo "Waiting for build/flutter/pubspec.yaml... ($i/60)"
+            sleep 2
           done
 
+          # Create the proguard file in the correct location
           mkdir -p build/flutter/android/app
-          cat > build/flutter/android/app/proguard-rules.pro << 'EOF'
-          # Fix for google_mlkit_text_recognition missing classes during R8
+          cat > build/flutter/android/app/proguard-rules.pro << 'PROGUARD_EOF'
+          # ================================================
+          # Fix for google_mlkit_text_recognition + R8
+          # These classes are referenced in the plugin but come from optional language packs
+          # ================================================
           -dontwarn com.google.mlkit.vision.text.chinese.**
           -dontwarn com.google.mlkit.vision.text.devanagari.**
           -dontwarn com.google.mlkit.vision.text.japanese.**
           -dontwarn com.google.mlkit.vision.text.korean.**
           -dontwarn com.google.mlkit.**
 
-          # Keep ML Kit classes that are loaded via reflection
+          # Keep all ML Kit classes (reflection + dynamic loading)
           -keep class com.google.mlkit.** { *; }
           -keep class com.google_mlkit_** { *; }
-          EOF
-          echo "✅ Successfully injected proguard-rules.pro"
+
+          # Additional safety for TextRecognizer
+          -keep class com.google.mlkit.vision.text.** { *; }
+          PROGUARD_EOF
+
+          echo "✅ proguard-rules.pro injected successfully"
+          ls -la build/flutter/android/app/proguard-rules.pro
 
       - name: Build app
         shell: bash
@@ -123,4 +128,3 @@ jobs:
         with:
           name: ${{ matrix.name }}-build-artifact
           path: ${{ matrix.artifact_path }}
-          
