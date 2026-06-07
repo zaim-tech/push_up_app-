@@ -14,7 +14,6 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-
     strategy:
       fail-fast: false
       matrix:
@@ -82,13 +81,27 @@ jobs:
           LINUX_DEPS="$(uv run python -c 'from flet.utils.linux_deps import linux_dependencies; print(" ".join(linux_dependencies))')"
           sudo apt-get install -y --no-install-recommends $LINUX_DEPS
 
-      # ✅ FIX R8 HERE (THIS IS THE IMPORTANT PART)
-      - name: Disable Android R8 (fix ML Kit crash)
+      # ======================================================
+      # ✅ PROPER FIX FOR APK / AAB (ML Kit + R8 error)
+      # ======================================================
+      - name: Prepare Android proguard rules (fix ML Kit R8)
         if: matrix.name == 'apk' || matrix.name == 'aab'
+        shell: bash
         run: |
-          mkdir -p android
-          echo "android.enableR8=false" >> android/gradle.properties
-          echo "android.enableDexingArtifactTransform=false" >> android/gradle.properties
+          mkdir -p android/app
+          cat > android/app/proguard-rules.pro << 'EOF'
+          # Fix for google_mlkit_text_recognition missing classes during R8
+          -dontwarn com.google.mlkit.vision.text.chinese.**
+          -dontwarn com.google.mlkit.vision.text.devanagari.**
+          -dontwarn com.google.mlkit.vision.text.japanese.**
+          -dontwarn com.google.mlkit.vision.text.korean.**
+          -dontwarn com.google.mlkit.**
+
+          # Keep ML Kit classes loaded via reflection
+          -keep class com.google.mlkit.** { *; }
+          -keep class com.google_mlkit_** { *; }
+          EOF
+          echo "✅ Created android/app/proguard-rules.pro"
 
       - name: Build app
         shell: bash
@@ -96,7 +109,7 @@ jobs:
           uv run ${{ matrix.build_cmd }} --yes --verbose
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}-build-artifact
           path: ${{ matrix.artifact_path }}
