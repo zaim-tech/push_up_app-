@@ -8,19 +8,17 @@ on:
 env:
   UV_PYTHON: 3.12
   PYTHONUTF8: 1
-
-  # https://flet.dev/docs/reference/environment-variables
   FLET_CLI_NO_RICH_OUTPUT: 1
 
 jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+
     strategy:
       fail-fast: false
       matrix:
         include:
-          # -------- Desktop --------
           - name: linux
             runner: ubuntu-latest
             build_cmd: "flet build linux"
@@ -39,25 +37,24 @@ jobs:
             artifact_path: build/windows
             needs_linux_deps: false
 
-          # -------- Android --------
-          - name: aab
-            runner: ubuntu-latest
-            build_cmd: "flet build aab"
-            artifact_path: build/aab
-            needs_linux_deps: false
-
-          - name: Disable R8 / shrinking
-            run: |
-              echo "android.enableR8=false" >> android/gradle.properties
-              echo "android.enableDexingArtifactTransform=false" >> android/gradle.properties  
-
           - name: apk
             runner: ubuntu-latest
             build_cmd: "flet build apk"
             artifact_path: build/apk
             needs_linux_deps: false
 
-          # -------- iOS --------
+          - name: aab
+            runner: ubuntu-latest
+            build_cmd: "flet build aab"
+            artifact_path: build/aab
+            needs_linux_deps: false
+
+          - name: web
+            runner: ubuntu-latest
+            build_cmd: "flet build web"
+            artifact_path: build/web
+            needs_linux_deps: false
+
           - name: ipa
             runner: macos-26
             build_cmd: "flet build ipa"
@@ -68,13 +65,6 @@ jobs:
             runner: macos-26
             build_cmd: "flet build ios-simulator"
             artifact_path: build/ios-simulator
-            needs_linux_deps: false
-
-          # -------- Web --------
-          - name: web
-            runner: ubuntu-latest
-            build_cmd: "flet build web"
-            artifact_path: build/web
             needs_linux_deps: false
 
     steps:
@@ -88,10 +78,17 @@ jobs:
         if: matrix.needs_linux_deps
         shell: bash
         run: |
-            sudo apt update --allow-releaseinfo-change
-            LINUX_DEPS="$(uv run python -c 'from flet.utils.linux_deps import linux_dependencies; print(" ".join(linux_dependencies))')"
-            sudo apt-get install -y --no-install-recommends $LINUX_DEPS
-            sudo apt-get clean
+          sudo apt update
+          LINUX_DEPS="$(uv run python -c 'from flet.utils.linux_deps import linux_dependencies; print(" ".join(linux_dependencies))')"
+          sudo apt-get install -y --no-install-recommends $LINUX_DEPS
+
+      # ✅ FIX R8 HERE (THIS IS THE IMPORTANT PART)
+      - name: Disable Android R8 (fix ML Kit crash)
+        if: matrix.name == 'apk' || matrix.name == 'aab'
+        run: |
+          mkdir -p android
+          echo "android.enableR8=false" >> android/gradle.properties
+          echo "android.enableDexingArtifactTransform=false" >> android/gradle.properties
 
       - name: Build app
         shell: bash
@@ -99,9 +96,7 @@ jobs:
           uv run ${{ matrix.build_cmd }} --yes --verbose
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v5.0.0
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.name }}-build-artifact
           path: ${{ matrix.artifact_path }}
-          if-no-files-found: error
-          overwrite: false
